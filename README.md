@@ -55,10 +55,10 @@ python3 main.py
 ```
 
 ## Game modes
- - 1. Play Snake (manual mode)
- - 2. Watch AI train over time
- - 3. Train AI Fast (much much much quicker)
- - 4. Watch Best AI (added for the faster trained AI)
+ - 1: Play Snake (manual mode)
+ - 2: Watch AI train over time
+ - 3: Train AI Fast (much much much quicker)
+ - 4: Watch Best AI (added for the faster trained AI)
 
  ## Note
  

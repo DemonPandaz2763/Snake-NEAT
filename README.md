@@ -47,7 +47,7 @@ Other dependencies include standard Python libraries such as `logging`, `pickle`
 
 ## Usage
 
-Before running the game, ensure that you have a config.txt file in the project directory. This is the AI's, it doesn't like to play without it.
+Before running the game, ensure that you have the config.txt file in the project directory. This is the AI's, it doesn't like to play without it.
 
 Run the game using:
 ```
@@ -58,8 +58,7 @@ python3 main.py
  - 1: Play Snake (manual mode)
  - 2: Watch AI train over time
  - 3: Train AI Fast (much much much quicker)
- - 4: Watch Best AI (added for the faster trained AI)
 
  ## Note
  
- This is a first draft of the program. I have no idea if it actually completes the game or not, though that is my goal. As of now the code is very bugging and very messy. I'm working on that :)
+I have no idea if it actually completes the game or not, though that is my goal. Im not an expert by any means, so keep that in mind while using this. :)

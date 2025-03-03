@@ -127,16 +127,32 @@ def compute_state(game):
     state = wall_info + food_info + body_info + current_dir + tail_dir
     return state
 
+def manhattan_distance(pos1, pos2):
+    """Compute Manhattan distance between two positions."""
+    return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+
 def eval_genomes_fast(genomes, config):
     for genome_id, genome in genomes:
         genome.fitness = 0.0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
-        game = SnakeGame()
+        game = SnakeGame(10, 10)
         
         max_steps_without_food = 150
         steps_without_food = 0
         
+        recent_positions = []
+        memory_window = 10
+        
         while not game.is_game_over() and steps_without_food < max_steps_without_food:
+            snake_length = len(game.snake)
+            scale_factor = max(1, 0.2 * snake_length)
+            
+            # Compute Manhattan distance to food before move
+            if game.food is not None:
+                old_distance = manhattan_distance(game.snake[0], game.food)
+            else:
+                old_distance = 0
+
             prev_score = game.score
             state = compute_state(game)
             output = net.activate(state)
@@ -145,12 +161,38 @@ def eval_genomes_fast(genomes, config):
             game.change_direction(new_direction)
             game.update()
             
+            # Compute Manhattan distance to food after move
+            if game.food is not None:
+                new_distance = manhattan_distance(game.snake[0], game.food)
+            else:
+                new_distance = 0
+                
+            if old_distance > new_distance:
+                genome.fitness += scale_factor * 0.3 * (old_distance - new_distance)
+            elif new_distance > old_distance:
+                genome.fitness -= 0.3 * (new_distance - old_distance)
+            
+            # Apply a constant step penalty
+            genome.fitness -= 0.5
+            
+            # Check for food consumption.
             if game.score > prev_score:
-                genome.fitness += 10.0
+                genome.fitness += scale_factor * 20
                 steps_without_food = 0
+                recent_positions = []
             else:
                 steps_without_food += 1
-                genome.fitness += 0.1
+
+            # Circling / Loop Detection
+            current_head = game.snake[0]
+            recent_positions.append(current_head)
+            if len(recent_positions) > memory_window:
+                recent_positions.pop(0)
+            if recent_positions.count(current_head) > 2:
+                genome.fitness -= 0.5
+
+        if game.is_game_over():
+            genome.fitness -= 24
 
 def simulate_winner_genome(winner, app, neural_net_width, neural_net_height, move_limit=150, rounds=1):
     net = neat.nn.FeedForwardNetwork.create(winner, app.config)
@@ -183,13 +225,16 @@ def simulate_winner_genome(winner, app, neural_net_width, neural_net_height, mov
                 moves_without_food = 0
             else:
                 moves_without_food += 1
+                
+            if app.game.score > app.best_score:
+                app.best_score = app.game.score
 
             app.screen.fill(BACKGROUND)
             draw_snake_game(app.screen, app.game, app.GAME_AREA, app.screen.get_height(), app.CELL_SIZE)
             
             gen_value = getattr(app, "current_best_genome", {}).get("generation", app.generation)
             info_surface = pg.Surface((app.INFO_AREA_WIDTH, app.INFO_AREA_HEIGHT))
-            draw_info_panel(info_surface, app.game.score, 0, f"Gen: {gen_value}", app)
+            draw_info_panel(info_surface, app.game.score, app.best_score, f"Gen: {gen_value}", app)
             app.screen.blit(info_surface, (app.GAME_AREA, 0))
             
             net_surface = pg.Surface((app.NET_AREA_WIDTH, app.NET_AREA_HEIGHT))
@@ -197,6 +242,4 @@ def simulate_winner_genome(winner, app, neural_net_width, neural_net_height, mov
             app.screen.blit(net_surface, (app.GAME_AREA, 80))
 
             pg.display.update()
-            clock.tick(144)
-
-        pg.time.delay(50)
+            clock.tick(60)

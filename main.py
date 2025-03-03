@@ -32,10 +32,11 @@ class App:
         pg.display.set_caption("Snake AI Project")
         
         self.load_assets()
-        self.game = SnakeGame(grid_height=6, grid_width=6)
+        self.game = SnakeGame(10, 10)
         
         self.state = "IDLE"
         self.generation = 0
+        self.best_score = 0
         
         self.local_dir = os.path.dirname(__file__)
         config_path = os.path.join(self.local_dir, "config.txt")
@@ -107,6 +108,7 @@ class App:
         sys.exit()
         
     def main_menu(self):
+        clock = pg.time.Clock()
         while self.state == "IDLE":
             draw_main_menu(self.screen, self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
             
@@ -127,12 +129,14 @@ class App:
                     elif event.key == pg.K_3:
                         self.state = "FAST_TRAINING"
             
-            pg.time.Clock().tick(144)
+            clock.tick(144)
             
     def human(self):
         self.generation = 0
         self.best_score = 0
         input_buffer = []
+        
+        clock = pg.time.Clock()
         
         while self.state == "HUMAN":
             for event in pg.event.get():
@@ -166,110 +170,65 @@ class App:
             self.screen.blit(info_surface, (self.GAME_AREA, 0))
             
             pg.display.update()
-            pg.time.Clock().tick(15)
+            clock.tick(15)
             
             if self.game.is_game_over():
                 self.generation += 1
                 self.game.reset_game()
-            
+    
     def watch_training(self):
         checkpoint_file = os.path.join(os.path.dirname(__file__), "checkpoint.pkl")
-        if os.path.exists:
+        if os.path.exists(checkpoint_file):
             try:
                 with open(checkpoint_file, "rb") as f:
-                    population = pickle.load(f)
-            except:
+                    checkpoint_data = pickle.load(f)
+                
+                if isinstance(checkpoint_data, dict) and "population" in checkpoint_data:
+                    population = checkpoint_data["population"]
+                    self.generation = checkpoint_data.get("generation", 0)
+                else:
+                    population = checkpoint_data
+            
+            except Exception as e:
+                logging.error(f"Failed to load checkpoint, initializing new population: {e}")
                 population = neat.Population(self.config)
+        
         else:
             population = neat.Population(self.config)
-        
+
         while self.state == "WATCH_TRAINING":
             winner = population.run(eval_genomes_fast, 1)
             self.generation = population.generation
-            
             simulate_winner_genome(winner, self, self.NET_AREA_WIDTH, self.NET_AREA_HEIGHT)
-            
-            if self.state != "WATCH_TRAINING":
-                break
-            
+
             try:
+                checkpoint_data = {
+                    "generation": self.generation,
+                    "best_genome": winner,
+                    "population": population
+                }
                 with open(checkpoint_file, "wb") as f:
-                    pickle.dump(population, f)
+                    pickle.dump(checkpoint_data, f)
+                logging.info(f"Checkpoint updated at generation {self.generation}.")
             except Exception as e:
                 logging.error(f"Failed to save checkpoint: {e}")
-            
-            current_winner_data = self.load_winner_genome()
-            saved_generation = current_winner_data.get("generation", -1)
-            
-            if self.generation > saved_generation:
-                new_winner_data = {"generation": self.generation, "genome": winner}
-                self.save_winner_genome(new_winner_data)
-            
+
             for event in pg.event.get():
                 if event.type == pg.QUIT:
                     self.state = "QUIT"
-                    
-                elif event.type == pg.KEYDOWN:
-                    if event.type == pg.K_ESCAPE:
-                        self.state = "IDLE"        
-    
-    # def watch_training(self):
-    #     best_data = self.load_winner_genome()
-    #     if best_data.get("genome"):
-    #         logging.info("Using best genome from saved data.")
-    #         simulate_winner_genome(best_data["genome"], self, self.NET_AREA_WIDTH, self.NET_AREA_HEIGHT)
-    #     else:
-    #         logging.info("No saved best genome found. Running training.")
-    #         checkpoint_file = os.path.join(os.path.dirname(__file__), "checkpoint.pkl")
-    #         if os.path.exists(checkpoint_file):
-    #             try:
-    #                 with open(checkpoint_file, "rb") as f:
-    #                     population = pickle.load(f)
-    #             except Exception as e:
-    #                 logging.error(f"Error loading checkpoint: {e}")
-    #                 population = neat.Population(self.config)
-    #         else:
-    #             population = neat.Population(self.config)
-            
-    #         while self.state == "WATCH_TRAINING":
-    #             winner = population.run(eval_genomes_fast, 1)
-    #             self.generation = population.generation
-                
-    #             simulate_winner_genome(winner, self, self.NET_AREA_WIDTH, self.NET_AREA_HEIGHT)
-                
-    #             if self.state != "WATCH_TRAINING":
-    #                 break
-                
-    #             try:
-    #                 with open(checkpoint_file, "wb") as f:
-    #                     pickle.dump(population, f)
-    #             except Exception as e:
-    #                 logging.error(f"Failed to save checkpoint: {e}")
-                
-    #             current_winner_data = self.load_winner_genome()
-    #             saved_generation = current_winner_data.get("generation", -1)
-    #             if self.generation > saved_generation:
-    #                 new_winner_data = {"generation": self.generation, "genome": winner}
-    #                 self.save_winner_genome(new_winner_data)
-                
-    #             for event in pg.event.get():
-    #                 if event.type == pg.QUIT:
-    #                     self.state = "QUIT"
-    #                 elif event.type == pg.KEYDOWN:
-    #                     if event.key == pg.K_ESCAPE:
-    #                         self.state = "IDLE"
+                elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+                    self.state = "IDLE"
     
     def train_ai_fast(self):
-        total_gens = 50
+        total_gens = 5000
         population = neat.Population(self.config)
         clock = pg.time.Clock()
         
-        while self.state == "FAST_TRAINING" and self.generation < total_gens:
+        while self.state == "FAST_TRAINING" and population.generation < total_gens:
             winner = population.run(eval_genomes_fast, 1)
-        
             self.generation = population.generation
+            
             self.screen.fill(BACKGROUND)
-        
             draw_progress_bar(self.screen, self.generation, total_gens, self.font_med, self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
             pg.display.update()
         
@@ -285,11 +244,18 @@ class App:
         
         checkpoint_file = os.path.join(os.path.dirname(__file__), "checkpoint.pkl")
         try:
+            checkpoint_data = {
+                "generation": self.generation,
+                "best_genome": winner,
+                "population": population
+            }
+        
             with open(checkpoint_file, "wb") as f:
-                pickle.dump(population, f)
+                pickle.dump(checkpoint_data, f)
             logging.info(f"Checkpoint saved at generation {self.generation}.")
+        
         except Exception as e:
-            logging.error(f"Failed to save checkpoint: {e}")        
+            logging.error(f"Failed to save checkpoint: {e}")
             
         self.state = "IDLE"
     
